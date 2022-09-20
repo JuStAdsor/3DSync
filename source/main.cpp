@@ -72,6 +72,31 @@ void componentsExit(){
     gfxExit();
 }
 
+void syncCheckPointSaves(std::string dropboxToken) {
+    // Sync Citra saves to local Checkpoint directory and vice versa
+    std::string checkpointPath = "/3ds/Checkpoint";
+    if (checkpointPath != "") {
+	downloadCitraSaves(dropboxToken, checkpointPath);
+	std::cout << "Finished syncing Citra saves!" << std::endl;
+    }
+}
+
+void syncCustomDirectories(std::string dropboxToken, INIReader reader) {
+    // Upload to Dropbox
+    std::map<std::string, std::string> values = reader.GetValues();
+    std::map<std::string, std::string> paths;
+    for(auto value : values){
+	if(value.first.rfind("paths=", 0) == 0){
+	    std::pair<std::string, std::string> key = std::make_pair(value.second, value.first.substr(6));
+	    paths[value.first.substr(6)] = value.second;
+	}
+    }
+    Dropbox dropbox(dropboxToken);
+    for (auto path : paths) {
+	dropbox.syncDirs(path.first, path.second);
+    }
+}
+
 int main(int argc, char** argv){
     if(!componentsInit()) componentsExit();
 
@@ -81,32 +106,40 @@ int main(int argc, char** argv){
         printf("Can't load configuration\n");
     } else {
         std::string refreshToken = reader.Get("Dropbox", "RefreshToken", "");
+        std::string clientId = reader.Get("Dropbox", "ClientId", "");
+        std::string clientSecret = reader.Get("Dropbox", "ClientSecret", "");
         
         if(refreshToken != ""){
-            std::string dropboxToken = get_dropbox_access_token(refreshToken);
+
+            std::string dropboxToken = get_dropbox_access_token(clientId, clientSecret, refreshToken);
+
             if (dropboxToken == "") {
                 std::cout << "Failed to receive Dropbox access token, exiting" << std::endl;
                 return 1;
             }
 
-            // Download Citra saves to local Checkpoint directory
-            std::string checkpointPath = reader.Get("Paths", "Checkpoint", "");
-            if (checkpointPath != "") {
-                downloadCitraSaves(dropboxToken, checkpointPath);
-                std::cout << "Finished downloading Citra saves!" << std::endl << std::endl;
-            }
-
-            // Upload to Dropbox
-            std::map<std::string, std::string> values = reader.GetValues();
-            std::map<std::pair<std::string, std::string>, std::vector<std::string>> paths;
-            for(auto value : values){
-                if(value.first.rfind("paths=", 0) == 0){
-                    std::pair<std::string, std::string> key = std::make_pair(value.second, value.first.substr(6));
-                    paths[key] = recurse_dir(value.second);
-                }
-            }
-            Dropbox dropbox(dropboxToken);
-            if((int)paths.size() > 0) dropbox.upload(paths);
+	    printf("\n    A: Sync Citra Saves\n    X: Sync Custom Directories\nSTART: Sync All\n    B: Quit Without Syncing\n");
+	    while (aptMainLoop()){
+		hidScanInput();
+		u32 kDown = hidKeysDown();
+		if (kDown & KEY_A) {
+                    syncCheckPointSaves(dropboxToken);
+		    break;
+	        } else if (kDown & KEY_X) { 
+                    syncCustomDirectories(dropboxToken, reader);
+		    break;
+		} else if (kDown & KEY_START) {
+                    syncCheckPointSaves(dropboxToken);
+                    syncCustomDirectories(dropboxToken, reader);
+		    break;
+		} else if (kDown & KEY_B) {
+                    componentsExit();
+		    return 0;
+		}
+		gfxFlushBuffers();
+		gfxSwapBuffers();
+		gspWaitForVBlank();
+	    }
         } else {
             printf("Can't load Dropbox token from 3DSync.ini\n");
         }

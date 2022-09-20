@@ -1,6 +1,9 @@
 #include <stdio.h>
 #include <malloc.h>
 #include <dirent.h>
+#include <chrono>
+#include <sstream>
+#include <iomanip>
 #include <string>
 #include <vector>
 #include <iostream>
@@ -10,16 +13,8 @@
 
 #include "dropbox.h"
 
-std::string getUpdateTimestampForCitraSave(std::string dropboxToken, std::string fullPath) {
-    Dropbox dropbox(dropboxToken);
-    auto results = dropbox.list_folder(fullPath + "/data/00000001");
-    for (auto lr : results) {
-        if (lr.name == "user1") {
-            return lr.server_modified;
-        }
-    }
-    return "";
-}
+const std::string timeFormat{"%Y-%m-%dT%H:%M:%SZ"};
+
 
 std::string checkpointDirToCitraGameCode(std::string checkpointGameSaveDir) {
     if (checkpointGameSaveDir.rfind("0x", 0) == 0) {
@@ -55,30 +50,26 @@ std::map<std::string, std::string> findCheckpointSaves(std::string checkpointPat
                 std::cout << "Invalid game directory, skipping: " << dirname << std::endl;
             }
         }
+    } else {
+        std::cout << "Failed to open checkpoint dir at " << path << std::endl;
     }
 
     return pathmap;
 }
 
-void downloadCitraSaveToCheckpoint(std::string dropboxToken, std::string timestamp, std::string checkpointPath, std::map<std::string, std::string> pathmap, std::string gameCode, std::string fullPath) {
+void downloadCitraSaveToCheckpoint(std::string dropboxToken, std::string checkpointPath, std::map<std::string, std::string> pathmap, std::string gameCode, std::string fullPath) {
     Dropbox dropbox(dropboxToken);
 
     std::string baseSaveDir = checkpointPath + "/saves";
 
     if (!pathmap.count(gameCode)) {
-        std::cout << "Game code " << gameCode << " not found in local Checkpoint saves, skipping";
+        //std::cout << "Game code " << gameCode << " not found in local Checkpoint saves, skipping" << std::endl;
         return;
     }
 
     std::string gameDirname = pathmap[gameCode];
     std::string gameSaveDir = baseSaveDir + "/" + gameDirname;
-    // TODO: Currently only the latest Citra save is retained per game. 
-    //       Could append timestamp if wanted, but adding raw timestamp caused segfaults on 3DS.
-    //       Investigate further if want to keep older saves.
-    // std::string destPath = gameSaveDir + "/Citra_" + timestamp;
     std::string destPath = gameSaveDir + "/Citra";
-
-    std::cout << "Citra save found for " << gameDirname << " with timestamp: " << timestamp << std::endl;
 
     struct stat info;
 
@@ -92,28 +83,21 @@ void downloadCitraSaveToCheckpoint(std::string dropboxToken, std::string timesta
     } else if (info.st_mode & !S_IFDIR) {
         std::cout << "File already exists at Checkpoint save dir, delete the file and try again:\n" << destPath << std::endl;
     } else {
-        std::cout << "Checkpoint save dir already exists: " << destPath << std::endl;
+        //std::cout << "Checkpoint save dir already exists: " << destPath << std::endl;
     }
 
-    dropbox.download(fullPath + "/data/00000001/system",  destPath + "/system");
-    dropbox.download(fullPath + "/data/00000001/user1", destPath + "/user1");
+    dropbox.syncDirs(fullPath + "/data/00000001", destPath);
 }
 
 void downloadCitraSaves(std::string dropboxToken, std::string checkpointPath) {
     auto pathmap = findCheckpointSaves(checkpointPath);
 
     Dropbox dropbox(dropboxToken);
-    auto folder = dropbox.list_folder("/sdmc/Nintendo 3DS/00000000000000000000000000000000/00000000000000000000000000000000/title/00040000");
+    auto folder = dropbox.list_folder("/saves/Citra/sdmc/Nintendo 3DS/00000000000000000000000000000000/00000000000000000000000000000000/title/00040000", false);
+    //auto folder = dropbox.list_folder("/sdmc/Nintendo 3DS/00000000000000000000000000000000/00000000000000000000000000000000/title/00040000");
     for (auto lr : folder) {
-        std::string timestamp = getUpdateTimestampForCitraSave(dropboxToken, lr.path_display);
-        if (timestamp == "") {
-            std::cout << lr.name << ": Could not find timestamp, skipping" << std::endl; 
-            continue;
-        }
-
         downloadCitraSaveToCheckpoint(
             dropboxToken,
-            timestamp,
             checkpointPath,
             pathmap,
             lr.name,

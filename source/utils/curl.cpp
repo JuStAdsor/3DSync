@@ -5,14 +5,14 @@ Curl::Curl(){
     _curl = curl_easy_init();
     if(!_curl) printf("Failed to init libcurl.\n");
     // Comment out next line for non-3DS builds
-    curl_easy_setopt(_curl, CURLOPT_USERAGENT, "3DSync/" VERSION_STRING);
+//    curl_easy_setopt(_curl, CURLOPT_USERAGENT, "3DSync/" VERSION_STRING);
     curl_easy_setopt(_curl, CURLOPT_CONNECTTIMEOUT, 50L);
     curl_easy_setopt(_curl, CURLOPT_FOLLOWLOCATION, 1L);
-    curl_easy_setopt(_curl, CURLOPT_FAILONERROR, 1L);
+    curl_easy_setopt(_curl, CURLOPT_FAILONERROR, 0L);
     curl_easy_setopt(_curl, CURLOPT_NOPROGRESS, 1L);
     curl_easy_setopt(_curl, CURLOPT_SSL_VERIFYPEER, 0L);
     curl_easy_setopt(_curl, CURLOPT_PIPEWAIT, 1L);
-    curl_easy_setopt(_curl, CURLOPT_WRITEFUNCTION, _write_callback);
+    //curl_easy_setopt(_curl, CURLOPT_WRITEFUNCTION, _write_callback);
     #ifdef DEBUG
         curl_easy_setopt(_curl, CURLOPT_WRITEFUNCTION, fwrite);
         curl_easy_setopt(_curl, CURLOPT_VERBOSE, 1L);
@@ -54,6 +54,10 @@ long Curl::getHTTPCode() {
     return http_code;
 }
 
+void Curl::setPrintResult() {
+    curl_easy_setopt(_curl, CURLOPT_WRITEFUNCTION, _write_print_callback);
+}
+
 void Curl::setWriteData(void *pointer) {
     curl_easy_setopt(_curl, CURLOPT_WRITEFUNCTION, _write_string_callback);
     curl_easy_setopt(_curl, CURLOPT_WRITEDATA, pointer);
@@ -92,6 +96,14 @@ size_t Curl::_write_callback(void *data, size_t size, size_t nmemb, void* userda
 size_t Curl::_write_string_callback(const char* data, size_t size, size_t nmemb, std::string* userdata){
     size_t newLength = size*nmemb;
     userdata->append(data, newLength);
+    return newLength;
+}
+
+size_t Curl::_write_print_callback(const char* data, size_t size, size_t nmemb, std::string* userdata){
+#ifdef DEBUG
+    printf("%s\n", data);
+#endif
+    size_t newLength = size*nmemb;
     return newLength;
 }
 
