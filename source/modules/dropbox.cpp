@@ -22,10 +22,6 @@
 #include <3ds.h>
 #endif
 
-const std::string CLIENT_ID = "teitrp9woa19r5o";
-const std::string CLIENT_SECRET = "0dbq9sv2hd3nnc0";
-//const std::string CLIENT_ID = "z4n5nrlgoypivuw";
-
 Dropbox::Dropbox(std::string token) : _token(token){
 }
 
